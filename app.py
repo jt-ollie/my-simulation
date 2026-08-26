@@ -6,14 +6,14 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="HF-SMDG V2", page_icon="🌧️", layout="wide")
+st.set_page_config(page_title="HF-SMDG V2.1", page_icon="🌧️", layout="wide")
 
 # -----------------------------
 # Simplified conceptual model
 # -----------------------------
 G = 9.81
 CD = 0.62
-ZONE_OPEN_AREA_M2 = 0.0045
+ZONE_OPEN_AREA_M2 = 0.0100
 ZONE_SURFACE_AREA_M2 = 1.50
 CATCHMENT_AREA_M2 = 300.0
 FLOAT_TRIGGER_M = 0.040
@@ -333,8 +333,8 @@ def scene_html(state, drain_type):
 # -----------------------------
 # Session state
 # -----------------------------
-if "sim_v2" not in st.session_state:
-    st.session_state.sim_v2 = initial_state()
+if "sim_v21" not in st.session_state:
+    st.session_state.sim_v21 = initial_state()
 
 # -----------------------------
 # Controls
@@ -348,25 +348,25 @@ speed = st.sidebar.select_slider("Simulation Speed", [0.5, 1, 2, 4], value=4, fo
 st.sidebar.markdown("---")
 st.sidebar.caption("Each zone has its own float. At 4 cm local water depth, that zone rotates from 20° to 50°. It resets below 2 cm.")
 
-st.title("HF-SMDG Simulation — Version 2")
+st.title("HF-SMDG Simulation — Version 2.1")
 st.caption("Visual conceptual model: rainfall → debris blockage → local water buildup → float activation → louver movement → debris redistribution → drainage.")
 
 b1,b2,b3,b4 = st.columns(4)
 with b1:
     if st.button("▶ Start Simulation", use_container_width=True, type="primary"):
-        st.session_state.sim_v2["running"] = True
+        st.session_state.sim_v21["running"] = True
 with b2:
     if st.button("⏸ Pause", use_container_width=True):
-        st.session_state.sim_v2["running"] = False
+        st.session_state.sim_v21["running"] = False
 with b3:
     if st.button("⏭ Step +1 s", use_container_width=True):
-        st.session_state.sim_v2["running"] = False
-        step(st.session_state.sim_v2, rain, debris, distribution, drain_type, 1.0)
+        st.session_state.sim_v21["running"] = False
+        step(st.session_state.sim_v21, rain, debris, distribution, drain_type, 1.0)
 with b4:
     if st.button("↺ Reset", use_container_width=True):
-        st.session_state.sim_v2 = initial_state(); st.rerun()
+        st.session_state.sim_v21 = initial_state(); st.rerun()
 
-state = st.session_state.sim_v2
+state = st.session_state.sim_v21
 zones = state["zones"]
 max_cm = max(z["depth_m"] for z in zones) * 100
 flow = sum(z["flow_lps"] for z in zones)
