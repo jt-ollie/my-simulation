@@ -1,49 +1,48 @@
-HF-SMDG Simulation — Version 1
+HF-SMDG Simulation — Version 2
 
-This is the first functional model for the Hydro-Flow Smart Micro-Drainage Gate (HF-SMDG) GED104 prototype.
+Version 2 turns the V1 calculation engine into a more visual working simulation.
 
-Version 1 includes
+New in V2
 
-Rainfall input
+Large central drain scene
 
-Low / Medium / High debris
+Visible rising/falling water level
 
-Zone A/B/C debris distribution
+Three visible zones (A, B, C)
 
-Three independent drainage zones
+Visible float state and louver angle
 
-Simplified hydraulic flow: Q = Cd × A × sqrt(2gh)
+Debris shown over each zone
 
-Float activation at 4 cm and reset at 2 cm
+Active-zone arrows toward a side debris bay
 
-Louver angle state
+Plain-language “What's happening” explanation
 
-Debris redistribution to a side collection bay
+Event log for blockage, float activation, louver movement, and reset
 
-Start / Pause / Step / Reset
+Fewer raw numbers in the main view
 
-Live water-depth graph
+Controlled Fixed Grate vs HF-SMDG comparison retained
 
-Fixed Grate vs HF-SMDG controlled comparison
+Recommended first demo
 
-Important limitation
-
-This is a conceptual educational model. Some coefficients, especially debris arrival and redistribution, are intentionally simplified and are not field-calibrated.
-
-Run
-
-pip install -r requirements.txt
-
-streamlit run app.py
-
-Suggested first test
-
-Rainfall: 120 mm/hr
+Rainfall: 150 mm/hr
 
 Debris: High
 
 Distribution: Zone A-heavy
 
-Controlled comparison: 180 seconds
+Drain type: HF-SMDG
 
-Version 2 can add the visual water/louver/debris animation and Figma-inspired styling.
+Speed: 4×
+
+Watch Zone A build blockage and water depth, then activate at 4 cm.
+
+Run locally
+
+pip install -r requirements.txt
+streamlit run app.py
+
+Scientific limitation
+
+This is a conceptual educational prototype, not a field-calibrated engineering model. The hydraulic relationship is real, while debris arrival and redistribution use simplified parameters for demonstrating the proposed mechanism.
