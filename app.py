@@ -4,9 +4,8 @@ from html import escape
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
-st.set_page_config(page_title="HF-SMDG V3", page_icon="🌧️", layout="wide")
+st.set_page_config(page_title="HF-SMDG V3.1", page_icon="🌧️", layout="wide")
 
 st.markdown(
     """
@@ -152,6 +151,7 @@ def initial_state():
         "max_depth": 0.0,
         "history": [],
         "events": ["00:00 — Simulation ready. Choose conditions and press Start."],
+        "last_redirect_log_s": -999.0,
     }
 
 
@@ -241,8 +241,15 @@ def step(state, rain, debris, distribution, drain_type, dt=1.0):
             moved = redirect_debris(z, state, dt)
             if moved > 0:
                 moved_zones.append(z["name"])
-        if moved_zones and int(state["time_s"]) % 10 == 0:
-            log_event(state, f"Active Zone(s) {', '.join(moved_zones)} are redirecting floating debris toward the bay.")
+        if (
+            moved_zones
+            and state["time_s"] - state.get("last_redirect_log_s", -999.0) >= 10.0
+        ):
+            log_event(
+                state,
+                f"Active Zone(s) {', '.join(moved_zones)} are redirecting floating debris toward the bay."
+            )
+            state["last_redirect_log_s"] = state["time_s"]
         for z in state["zones"]:
             z["flow_lps"] = hydraulic_flow(z["depth_m"], z["blockage"])
 
@@ -444,7 +451,7 @@ def scene_html(state, drain_type):
       }}
       .badge.secondary {{border-color:#4b415f;background:#211c2b;color:#dfd3ef}}
       svg {{
-        width:100%;height:355px;background:linear-gradient(180deg,#111b28,#0d1722);
+        width:100%;height:365px;background:linear-gradient(180deg,#111b28,#0d1722);
         border:1px solid #24384b;border-radius:11px
       }}
       .road {{fill:#373f4b}} .curb {{fill:#737d89}}
@@ -479,7 +486,7 @@ def scene_html(state, drain_type):
       .caption {{
         display:grid;grid-template-columns:115px 1fr;gap:8px;margin-top:10px;
         background:#0e1c28;border:1px solid #223a4d;border-left:4px solid #55d3dd;
-        border-radius:7px;padding:9px 11px;font-size:12px;line-height:1.4
+        border-radius:7px;padding:10px 11px;font-size:12px;line-height:1.45;min-height:40px
       }}
       .caption strong {{color:#7ee4ea}} .caption span {{color:#d7e7f4}}
       .baynote {{fill:#c6a678;font-size:8px}}
@@ -543,8 +550,8 @@ def scene_html(state, drain_type):
 # -----------------------------
 # Session state
 # -----------------------------
-if "sim_v3" not in st.session_state:
-    st.session_state.sim_v3 = initial_state()
+if "sim_v31" not in st.session_state:
+    st.session_state.sim_v31 = initial_state()
 
 # -----------------------------
 # Controls
@@ -588,19 +595,19 @@ st.markdown(
 b1,b2,b3,b4 = st.columns(4)
 with b1:
     if st.button("▶ Start Simulation", use_container_width=True, type="primary"):
-        st.session_state.sim_v3["running"] = True
+        st.session_state.sim_v31["running"] = True
 with b2:
     if st.button("⏸ Pause", use_container_width=True):
-        st.session_state.sim_v3["running"] = False
+        st.session_state.sim_v31["running"] = False
 with b3:
     if st.button("⏭ Step +1 s", use_container_width=True):
-        st.session_state.sim_v3["running"] = False
-        step(st.session_state.sim_v3, rain, debris, distribution, drain_type, 1.0)
+        st.session_state.sim_v31["running"] = False
+        step(st.session_state.sim_v31, rain, debris, distribution, drain_type, 1.0)
 with b4:
     if st.button("↺ Reset", use_container_width=True):
-        st.session_state.sim_v3 = initial_state(); st.rerun()
+        st.session_state.sim_v31 = initial_state(); st.rerun()
 
-state = st.session_state.sim_v3
+state = st.session_state.sim_v31
 zones = state["zones"]
 max_cm = max(z["depth_m"] for z in zones) * 100
 flow = sum(z["flow_lps"] for z in zones)
@@ -620,7 +627,9 @@ else: st.info(f"**STATUS: {stat}** — {detail}")
 
 left,right = st.columns([3.25,1.15])
 with left:
-    components.html(scene_html(state, drain_type), height=435, scrolling=False)
+    # Inline HTML/SVG avoids recreating an iframe on every Streamlit rerun.
+    # It also lets the explanation panel use its natural height.
+    st.html(scene_html(state, drain_type))
 with right:
     st.subheader("Zone Inspector")
     for z in zones:
@@ -718,9 +727,16 @@ The **redirected debris** value is recorded as cumulative blockage **percentage-
 
 **Important:** this is not CFD and is not field-calibrated. Debris arrival and debris redistribution are simplified transparent model parameters used to demonstrate the invention's operating logic.''')
 
-st.caption("HF-SMDG V3 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
+st.caption("HF-SMDG V3.1 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
 
 if state["running"]:
-    time.sleep(0.45 / speed)
-    step(state, rain, debris, distribution, drain_type, 1.0)
+    # Keep the visual refresh rate stable instead of rebuilding the page
+    # faster and faster as simulation speed increases.
+    REFRESH_INTERVAL_S = 0.25
+    time.sleep(REFRESH_INTERVAL_S)
+
+    # Advance simulated time according to the selected speed.
+    simulated_dt = REFRESH_INTERVAL_S * float(speed)
+    step(state, rain, debris, distribution, drain_type, simulated_dt)
+
     st.rerun()
