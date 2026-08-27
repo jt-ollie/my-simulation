@@ -1,11 +1,14 @@
-import math
+
 import time
 from html import escape
+from io import BytesIO
+
+from PIL import Image, ImageDraw, ImageFont
 
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="HF-SMDG V3.2", page_icon="🌧️", layout="wide")
+st.set_page_config(page_title="HF-SMDG V3.3", page_icon="🌧️", layout="wide")
 
 st.markdown(
     """
@@ -319,244 +322,265 @@ def status(state):
     return "NORMAL", "Runoff is draining without an active louver response."
 
 
-def louver_line(x, y, angle, active, fixed=False):
-    length = 42
-    r = math.radians(angle)
-    x2 = x + length * math.cos(r)
-    y2 = y - length * math.sin(r)
-    cls = "fixed-bar" if fixed else ("louver active" if active else "louver")
-    return f'<line class="{cls}" x1="{x:.1f}" y1="{y}" x2="{x2:.1f}" y2="{y2:.1f}" />'
-
-
-def leaf_svg(x, y, rotation=0, moving=False):
-    cls = "leaf moving" if moving else "leaf"
-    return f"""
-    <g class="{cls}" transform="translate({x} {y}) rotate({rotation})">
-      <path d="M0,0 C7,-7 16,-6 19,0 C14,8 6,9 0,0 Z"/>
-      <line x1="3" y1="1" x2="16" y2="-1"/>
-    </g>
+def _font(size=20, bold=False):
     """
-
-
-def bag_svg(x, y, moving=False):
-    cls = "bag moving" if moving else "bag"
-    return f"""
-    <g class="{cls}" transform="translate({x} {y}) scale(.62)">
-      <path d="M0,5 L3,0 L8,4 L13,0 L17,5 L15,22 L2,22 Z"/>
-      <path d="M4,5 C5,1 7,1 8,5"/>
-      <path d="M10,5 C11,1 13,1 14,5"/>
-    </g>
+    Portable font helper.
+    Uses common fonts when available and falls back to Pillow's default font.
     """
+    candidates = []
+    if bold:
+        candidates.extend([
+            "C:/Windows/Fonts/arialbd.ttf",
+            "C:/Windows/Fonts/segoeuib.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ])
+    else:
+        candidates.extend([
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/segoeui.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ])
+
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size=size)
+        except Exception:
+            pass
+
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
-def debris_svg(x0, blockage, active, seed):
-    count = min(10, int(blockage / 7.0))
-    out = []
-    for i in range(count):
-        x = x0 + 18 + ((i * 39 + seed * 13) % 137)
-        y = 87 + ((i * 17 + seed * 9) % 38)
-        if i % 4 == 3:
-            out.append(bag_svg(x, y, active))
-        else:
-            out.append(leaf_svg(x, y, ((i * 29) % 46) - 23, active))
-    return "".join(out)
+def _arrow(draw, start, end, color, width=4):
+    """Draw a line with a simple triangular arrow head."""
+    draw.line([start, end], fill=color, width=width)
+    x1, y1 = start
+    x2, y2 = end
+    angle = math.atan2(y2 - y1, x2 - x1)
+    head = 12
+    a1 = angle + math.radians(150)
+    a2 = angle - math.radians(150)
+    p1 = (x2 + head * math.cos(a1), y2 + head * math.sin(a1))
+    p2 = (x2 + head * math.cos(a2), y2 + head * math.sin(a2))
+    draw.polygon([(x2, y2), p1, p2], fill=color)
 
 
-def scene_html(state, drain_type):
+def _leaf(draw, x, y, scale=1.0, color=(143, 138, 63)):
+    w = int(18 * scale)
+    h = int(10 * scale)
+    draw.ellipse([x, y, x + w, y + h], fill=color, outline=(198, 189, 103), width=1)
+    draw.line(
+        [(x + 3, y + h // 2), (x + w - 2, y + h // 2)],
+        fill=(94, 97, 46),
+        width=1,
+    )
+
+
+def _bag(draw, x, y, scale=1.0):
+    w = int(14 * scale)
+    h = int(18 * scale)
+    pts = [
+        (x, y + 4),
+        (x + 3, y),
+        (x + 6, y + 3),
+        (x + 10, y),
+        (x + w, y + 4),
+        (x + w - 2, y + h),
+        (x + 2, y + h),
+    ]
+    draw.polygon(pts, fill=(205, 214, 222), outline=(238, 244, 248))
+    draw.arc([x + 2, y, x + 8, y + 8], 190, 350, fill=(238, 244, 248), width=1)
+
+
+def render_scene_png(state, drain_type):
+    """
+    Render the center drain visualization to a PNG.
+
+    Using st.image() instead of inline SVG/HTML avoids:
+      - iframe flashing
+      - st.html SVG sanitization
+      - CSS leaking into Streamlit controls
+    """
+    W, H = 1200, 500
+    img = Image.new("RGB", (W, H), (8, 14, 22))
+    draw = ImageDraw.Draw(img)
+
+    font_s = _font(15)
+    font_sm = _font(13)
+    font_m = _font(18, bold=True)
+    font_l = _font(23, bold=True)
+
+    # Palette
+    border = (39, 57, 76)
+    panel = (12, 22, 33)
+    road = (55, 63, 75)
+    curb = (113, 125, 137)
+    water = (24, 103, 139)
+    cyan = (120, 219, 224)
+    amber = (255, 190, 74)
+    text = (235, 245, 252)
+    muted = (148, 166, 184)
+    bay_fill = (46, 35, 24)
+
+    # Outer panel
+    draw.rounded_rectangle([5, 5, W - 5, H - 5], radius=18, fill=panel, outline=border, width=2)
+
+    # Header
+    draw.text((22, 17), "LIVE DRAIN SIMULATION", fill=text, font=font_l)
+    mode_tag = f"CURRENT TEST: {drain_type}"
+    tag_w = draw.textbbox((0, 0), mode_tag, font=font_s)[2] + 28
+    draw.rounded_rectangle([W - tag_w - 22, 15, W - 22, 43], radius=13, fill=(16, 36, 45), outline=(40, 86, 107))
+    draw.text((W - tag_w - 8, 22), mode_tag, fill=(191, 234, 244), font=font_s)
+
+    # Road
+    road_top, road_bottom = 60, 145
+    draw.rectangle([22, road_top, W - 22, road_bottom], fill=road)
+    draw.line([(100, 102), (W - 110, 102)], fill=(121, 132, 143), width=3)
+    # dashed lane effect
+    for x in range(115, W - 130, 70):
+        draw.line([(x, 102), (x + 34, 102)], fill=(70, 78, 88), width=5)
+    draw.rectangle([22, 132, W - 22, 145], fill=curb)
+    draw.text((38, 72), "ROAD / GUTTER RUNOFF", fill=(170, 187, 202), font=font_sm)
+    _arrow(draw, (360, 78), (785, 78), (133, 222, 241), 4)
+    draw.text((475, 59), "SURFACE FLOW -> COLLECTION SIDE", fill=(164, 182, 198), font=font_sm)
+
+    # Dynamic surface water
     zones = state["zones"]
     max_depth = max(z["depth_m"] for z in zones)
     frac = min(max_depth / MAX_DISPLAY_DEPTH_M, 1.0)
-    water_h = 92 * frac
-    water_y = 158 - water_h
-    flood_y = 158 - 92 * min(FLOOD_THRESHOLD_M / MAX_DISPLAY_DEPTH_M, 1.0)
+    max_water_height = 95
+    water_h = int(max_water_height * frac)
+    water_y = 235 - water_h
+    draw.rectangle([22, water_y, W - 22, 235], fill=water)
+    draw.line([(22, water_y), (W - 22, water_y)], fill=(102, 217, 239), width=3)
 
-    xs = [62, 258, 454]
-    bay_x = 654
-    grate_y = 151
+    # Flood threshold
+    threshold_frac = min(FLOOD_THRESHOLD_M / MAX_DISPLAY_DEPTH_M, 1.0)
+    flood_y = 235 - int(max_water_height * threshold_frac)
+    for x in range(22, W - 22, 22):
+        draw.line([(x, flood_y), (x + 12, flood_y)], fill=(243, 185, 78), width=2)
+    draw.text((34, flood_y - 22), "8 cm FLOOD THRESHOLD", fill=(242, 200, 117), font=font_sm)
+
+    # Zone geometry
+    zone_xs = [95, 350, 605]
+    zone_w = 215
+    zone_top = 205
+    zone_bottom = 420
+    bay_x = 865
+    bay_w = 210
     is_fixed = drain_type == "Fixed Grate"
 
-    pieces, louvers, floats, labels, arrows = [], [], [], [], []
+    # Debris first so it visually sits around/above the grate.
+    for idx, (z, x0) in enumerate(zip(zones, zone_xs)):
+        count = min(10, int(z["blockage"] / 7.0))
+        for i in range(count):
+            px = x0 + 20 + ((i * 47 + idx * 17) % 165)
+            py = 170 + ((i * 19 + idx * 11) % 45)
+            if i % 4 == 3:
+                _bag(draw, px, py, 0.9)
+            else:
+                _leaf(draw, px, py, 0.9)
 
-    for idx, (z, x0) in enumerate(zip(zones, xs)):
-        pieces.append(debris_svg(x0, z["blockage"], z["float_active"], idx))
-
-        for j in range(4):
-            louvers.append(
-                louver_line(
-                    x0 + 24 + j * 32,
-                    grate_y,
-                    z["angle"],
-                    z["float_active"],
-                    fixed=is_fixed,
-                )
-            )
-
-        if is_fixed:
-            floats.append(
-                f'<text class="no-actuator" x="{x0+82}" y="226" text-anchor="middle">'
-                f'NO FLOAT / ACTUATOR</text>'
-            )
-        else:
-            fy = 205 if z["float_active"] else 233
-            floats.append(
-                f'<line class="linkage" x1="{x0+82}" y1="155" x2="{x0+82}" y2="{fy-14}" />'
-                f'<circle class="float {"raised" if z["float_active"] else ""}" cx="{x0+82}" cy="{fy}" r="12" />'
-                f'<text class="float-label {"raised-text" if z["float_active"] else ""}" '
-                f'x="{x0+82}" y="{fy+29}" text-anchor="middle">'
-                f'FLOAT: {"RAISED" if z["float_active"] else "DOWN"}</text>'
-            )
-
-        mode = "FIXED" if is_fixed else ("ACTIVE" if z["float_active"] else "NORMAL")
-        labels.append(
-            f'<text class="zone-name" x="{x0+8}" y="181">ZONE {z["name"]}</text>'
-            f'<text class="zone-status {"status-active" if z["float_active"] else ""}" '
-            f'x="{x0+8}" y="198">{mode} · {z["angle"]}° · {z["blockage"]:.0f}% blocked</text>'
+    # Zones
+    for idx, (z, x0) in enumerate(zip(zones, zone_xs)):
+        draw.rounded_rectangle(
+            [x0, zone_top, x0 + zone_w, zone_bottom],
+            radius=12,
+            fill=(18, 33, 48),
+            outline=(52, 83, 106),
+            width=2,
         )
 
-        if z["float_active"] and not is_fixed:
-            arrows.append(
-                f'<path class="redirect" d="M {x0+115} 102 C {x0+160} 70, 625 70, 685 102"/>'
+        # Louvers
+        for j in range(4):
+            x1 = x0 + 32 + j * 43
+            y1 = 270
+            angle = math.radians(z["angle"])
+            length = 55
+            x2 = x1 + length * math.cos(angle)
+            y2 = y1 - length * math.sin(angle)
+            color = (154, 166, 178) if is_fixed else (amber if z["float_active"] else cyan)
+            draw.line([(x1, y1), (x2, y2)], fill=color, width=9)
+
+        mode = "FIXED" if is_fixed else ("ACTIVE" if z["float_active"] else "NORMAL")
+        mode_color = amber if z["float_active"] and not is_fixed else muted
+
+        draw.text((x0 + 14, 298), f"ZONE {z['name']}", fill=text, font=font_m)
+        draw.text(
+            (x0 + 14, 326),
+            f"{mode} | {z['angle']} deg | {z['blockage']:.0f}% blocked",
+            fill=mode_color,
+            font=font_sm,
+        )
+
+        # Float / actuator
+        if is_fixed:
+            draw.text((x0 + 45, 378), "NO FLOAT / ACTUATOR", fill=muted, font=font_sm)
+        else:
+            fy = 350 if z["float_active"] else 382
+            draw.line([(x0 + zone_w // 2, 278), (x0 + zone_w // 2, fy - 18)], fill=(127, 146, 166), width=4)
+            fill = amber if z["float_active"] else (96, 116, 137)
+            outline = (255, 225, 160) if z["float_active"] else (176, 194, 210)
+            draw.ellipse(
+                [x0 + zone_w // 2 - 15, fy - 15, x0 + zone_w // 2 + 15, fy + 15],
+                fill=fill,
+                outline=outline,
+                width=2,
             )
+            fstate = "FLOAT: RAISED" if z["float_active"] else "FLOAT: DOWN"
+            draw.text((x0 + 58, 400), fstate, fill=(255, 197, 94) if z["float_active"] else muted, font=font_sm)
+
+        # Water down-arrow
+        _arrow(draw, (x0 + zone_w // 2, 430), (x0 + zone_w // 2, 468), (133, 222, 241), 4)
+
+        # Redirection arrow
+        if z["float_active"] and not is_fixed:
+            start = (x0 + zone_w - 10, 188)
+            end = (bay_x + 35, 190)
+            _arrow(draw, start, end, amber, 3)
+
+    # Debris bay
+    draw.rounded_rectangle(
+        [bay_x, zone_top, bay_x + bay_w, zone_bottom],
+        radius=12,
+        fill=bay_fill,
+        outline=(123, 92, 56),
+        width=2,
+    )
+    draw.text((bay_x + 16, 298), "DEBRIS BAY", fill=text, font=font_m)
+    draw.text(
+        (bay_x + 16, 328),
+        f"{state['debris_bay']:.1f} blockage-pp redirected",
+        fill=(198, 166, 120),
+        font=font_sm,
+    )
+    draw.text((bay_x + 16, 354), "Debris stays accessible", fill=(198, 166, 120), font=font_sm)
+    draw.text((bay_x + 16, 375), "above the drainage pipe", fill=(198, 166, 120), font=font_sm)
 
     bay_count = min(12, int(state["debris_bay"] / 2.8))
-    bay_bits = []
     for i in range(bay_count):
-        x = bay_x + 17 + (i % 3) * 34
-        y = 116 + (i // 3) * 19
+        px = bay_x + 20 + (i % 4) * 40
+        py = 225 + (i // 4) * 20
         if i % 4 == 3:
-            bay_bits.append(bag_svg(x, y, False))
+            _bag(draw, px, py, 0.8)
         else:
-            bay_bits.append(leaf_svg(x, y, (i * 27) % 46 - 23, False))
+            _leaf(draw, px, py, 0.8)
 
-    explanation = escape(current_explanation(state, drain_type))
-    system_tag = "PASSIVE ADAPTIVE LOUVERS" if not is_fixed else "NON-ADAPTIVE REFERENCE"
+    draw.text((435, 474), "WATER -> STORM DRAIN", fill=(158, 181, 201), font=font_sm)
 
-    return f"""
-    <style>
-      .hfscene-root {{
-        margin:0;
-        background:transparent;
-        color:#eaf4ff;
-        font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-        width:100%;
-      }}
-      .hfscene-root .panel {{
-        background:linear-gradient(180deg,#0c1520,#09111a);
-        border:1px solid #26394c;border-radius:15px;padding:12px;
-        box-shadow:0 12px 35px rgba(0,0,0,.18);overflow:hidden;
-      }}
-      .hfscene-root .top {{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}}
-      .hfscene-root .title {{font-size:15px;font-weight:900;letter-spacing:.02em}}
-      .hfscene-root .badges {{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}}
-      .hfscene-root .badge {{
-        font-size:10px;font-weight:800;letter-spacing:.04em;padding:5px 8px;border-radius:999px;
-        border:1px solid #28556a;background:#10242d;color:#bfeaf4
-      }}
-      .hfscene-root .badge.secondary {{border-color:#4b415f;background:#211c2b;color:#dfd3ef}}
-      .hfscene-root svg {{
-        width:100%;height:350px;background:linear-gradient(180deg,#111b28,#0d1722);
-        border:1px solid #24384b;border-radius:11px
-      }}
-      .hfscene-root .road {{fill:#373f4b}} .hfscene-root .curb {{fill:#737d89}}
-      .hfscene-root .lane {{stroke:#79838e;stroke-width:2;stroke-dasharray:20 14;opacity:.6}}
-      .hfscene-root .water {{fill:url(#waterGrad);opacity:.82}}
-      .hfscene-root .surface {{stroke:#66d9ef;stroke-width:2;stroke-dasharray:8 6}}
-      .hfscene-root .flood {{stroke:#f3b94e;stroke-width:1.5;stroke-dasharray:6 5}}
-      .hfscene-root .small {{fill:#a0b4c8;font-size:10px}} .hfscene-root .floodtext {{fill:#f2c875;font-size:10px;font-weight:800}}
-      .hfscene-root .zone {{fill:#122130;stroke:#34536a;stroke-width:1.2}} .hfscene-root .bay {{fill:#2b2218;stroke:#7b5c38;stroke-width:1.2}}
-      .hfscene-root .fixed-bar {{stroke:#9aa6b2;stroke-width:8;stroke-linecap:round}}
-      .hfscene-root .louver {{stroke:#78dbe0;stroke-width:8;stroke-linecap:round}}
-      .hfscene-root .louver.active {{stroke:#ffbe4a;filter:drop-shadow(0 0 5px rgba(255,190,74,.38))}}
-      .hfscene-root .linkage {{stroke:#7f92a6;stroke-width:3}}
-      .hfscene-root .float {{fill:#607489;stroke:#b0c2d2;stroke-width:2}}
-      .hfscene-root .float.raised {{fill:#ffb83d;stroke:#ffe1a0;filter:drop-shadow(0 0 4px rgba(255,184,61,.4))}}
-      .hfscene-root .float-label {{fill:#8497aa;font-size:8px;font-weight:800}}
-      .hfscene-root .raised-text {{fill:#ffc55e}}
-      .hfscene-root .no-actuator {{fill:#8493a2;font-size:7.5px;font-weight:800;letter-spacing:.06em}}
-      .hfscene-root .leaf path {{fill:#8f8a3f;stroke:#c6bd67;stroke-width:.8}}
-      .hfscene-root .leaf line {{stroke:#5e612e;stroke-width:1}}
-      .hfscene-root .bag path {{fill:#c7d0d8;stroke:#eef4f8;stroke-width:1;opacity:.96}}
-      .hfscene-root .moving {{animation:debrisPulse 1.2s ease-in-out infinite alternate}}
-      @keyframes debrisPulse {{from{{opacity:.72}} to{{opacity:1}}}}
-      .hfscene-root .zone-name {{fill:#edf6ff;font-size:13px;font-weight:900}}
-      .hfscene-root .zone-status {{fill:#92a6b9;font-size:9px;font-weight:800}} .hfscene-root .status-active {{fill:#ffc85d}}
-      .hfscene-root .redirect {{
-        fill:none;stroke:#f2b548;stroke-width:2;stroke-dasharray:7 5;marker-end:url(#amber);
-        animation:dashMove 1.05s linear infinite
-      }}
-      @keyframes dashMove {{to{{stroke-dashoffset:-24}}}}
-      .hfscene-root .flow {{fill:none;stroke:#85def1;stroke-width:3;marker-end:url(#blue)}}
-      .hfscene-root .caption {{
-        display:grid;grid-template-columns:115px 1fr;gap:8px;margin-top:10px;
-        background:#0e1c28;border:1px solid #223a4d;border-left:4px solid #55d3dd;
-        border-radius:7px;padding:10px 11px;font-size:12px;line-height:1.45;min-height:40px
-      }}
-      .hfscene-root .caption strong {{color:#7ee4ea}} .hfscene-root .caption span {{color:#d7e7f4}}
-      .hfscene-root .baynote {{fill:#c6a678;font-size:8px}}
-    </style>
-    <div class="hfscene-root">
-    <div class="panel">
-      <div class="top">
-        <div class="title">LIVE DRAIN SIMULATION</div>
-        <div class="badges">
-          <span class="badge">CURRENT TEST: {escape(drain_type)}</span>
-          <span class="badge secondary">{system_tag}</span>
-        </div>
-      </div>
-      <svg viewBox="0 0 825 325">
-        <defs>
-          <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#237fa4"/><stop offset="100%" stop-color="#124b69"/>
-          </linearGradient>
-          <marker id="amber" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#f2b548"/>
-          </marker>
-          <marker id="blue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#85def1"/>
-          </marker>
-        </defs>
-
-        <rect class="road" x="0" y="0" width="825" height="73"/>
-        <line class="lane" x1="80" y1="38" x2="745" y2="38"/>
-        <rect class="curb" x="0" y="63" width="825" height="10"/>
-        <text class="small" x="18" y="22">ROAD / GUTTER RUNOFF</text>
-        <path class="flow" d="M205 22 L600 22"/>
-        <text class="small" x="353" y="13">SURFACE FLOW → COLLECTION SIDE</text>
-
-        <rect class="water" x="0" y="{water_y:.1f}" width="825" height="{water_h:.1f}"/>
-        <line class="surface" x1="0" y1="{water_y:.1f}" x2="825" y2="{water_y:.1f}"/>
-        <line class="flood" x1="0" y1="{flood_y:.1f}" x2="825" y2="{flood_y:.1f}"/>
-        <text class="floodtext" x="8" y="{max(84,flood_y-5):.1f}">8 cm FLOOD THRESHOLD</text>
-
-        <rect class="zone" x="62" y="105" width="166" height="147" rx="8"/>
-        <rect class="zone" x="258" y="105" width="166" height="147" rx="8"/>
-        <rect class="zone" x="454" y="105" width="166" height="147" rx="8"/>
-        <rect class="bay" x="{bay_x}" y="105" width="132" height="147" rx="8"/>
-
-        {''.join(pieces)}{''.join(louvers)}{''.join(floats)}{''.join(labels)}{''.join(arrows)}
-
-        <text class="zone-name" x="{bay_x+10}" y="181">DEBRIS BAY</text>
-        <text class="zone-status" x="{bay_x+10}" y="198">{state['debris_bay']:.1f} blockage-pp redirected</text>
-        <text class="baynote" x="{bay_x+10}" y="232">debris stays accessible</text>
-        <text class="baynote" x="{bay_x+10}" y="243">above the drainage pipe</text>
-        {''.join(bay_bits)}
-
-        <path class="flow" d="M145 258 L145 300"/>
-        <path class="flow" d="M341 258 L341 300"/>
-        <path class="flow" d="M537 258 L537 300"/>
-        <text class="small" x="286" y="316">WATER → STORM DRAIN</text>
-      </svg>
-      <div class="caption"><strong>WHAT'S HAPPENING</strong><span>{explanation}</span></div>
-    </div>
-    </div>
-    """
+    bio = BytesIO()
+    img.save(bio, format="PNG", optimize=True)
+    bio.seek(0)
+    return bio.getvalue()
 
 
 # -----------------------------
 # Session state
 # -----------------------------
-if "sim_v32" not in st.session_state:
-    st.session_state.sim_v32 = initial_state()
+if "sim_v33" not in st.session_state:
+    st.session_state.sim_v33 = initial_state()
 
 # -----------------------------
 # Controls
@@ -600,19 +624,19 @@ st.markdown(
 b1,b2,b3,b4 = st.columns(4)
 with b1:
     if st.button("▶ Start Simulation", use_container_width=True, type="primary"):
-        st.session_state.sim_v32["running"] = True
+        st.session_state.sim_v33["running"] = True
 with b2:
     if st.button("⏸ Pause", use_container_width=True):
-        st.session_state.sim_v32["running"] = False
+        st.session_state.sim_v33["running"] = False
 with b3:
     if st.button("⏭ Step +1 s", use_container_width=True):
-        st.session_state.sim_v32["running"] = False
-        step(st.session_state.sim_v32, rain, debris, distribution, drain_type, 1.0)
+        st.session_state.sim_v33["running"] = False
+        step(st.session_state.sim_v33, rain, debris, distribution, drain_type, 1.0)
 with b4:
     if st.button("↺ Reset", use_container_width=True):
-        st.session_state.sim_v32 = initial_state(); st.rerun()
+        st.session_state.sim_v33 = initial_state(); st.rerun()
 
-state = st.session_state.sim_v32
+state = st.session_state.sim_v33
 zones = state["zones"]
 max_cm = max(z["depth_m"] for z in zones) * 100
 flow = sum(z["flow_lps"] for z in zones)
@@ -632,9 +656,15 @@ else: st.info(f"**STATUS: {stat}** — {detail}")
 
 left,right = st.columns([3.25,1.15])
 with left:
-    # Inline HTML/SVG avoids recreating an iframe on every Streamlit rerun.
-    # It also lets the explanation panel use its natural height.
-    st.html(scene_html(state, drain_type))
+    st.image(
+        render_scene_png(state, drain_type),
+        use_container_width=True,
+    )
+    st.markdown(
+        f'<div class="model-note"><b>WHAT\'S HAPPENING:</b> '
+        f'{escape(current_explanation(state, drain_type))}</div>',
+        unsafe_allow_html=True,
+    )
 with right:
     st.subheader("Zone Inspector")
     for z in zones:
@@ -732,12 +762,12 @@ The **redirected debris** value is recorded as cumulative blockage **percentage-
 
 **Important:** this is not CFD and is not field-calibrated. Debris arrival and debris redistribution are simplified transparent model parameters used to demonstrate the invention's operating logic.''')
 
-st.caption("HF-SMDG V3.2 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
+st.caption("HF-SMDG V3.3 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
 
 if state["running"]:
     # Keep the visual refresh rate stable instead of rebuilding the page
     # faster and faster as simulation speed increases.
-    REFRESH_INTERVAL_S = 0.33
+    REFRESH_INTERVAL_S = 0.40
     time.sleep(REFRESH_INTERVAL_S)
 
     # Advance simulated time according to the selected speed.
