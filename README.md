@@ -1,37 +1,59 @@
-HF-SMDG Simulation — Version 3.1
+HF-SMDG Simulation — Version 3.2
 
-Version 3.1 is a stability and layout fix for Version 3.
+V3.2 fixes the UI regression that appeared after switching the live simulation
+from an iframe to inline st.html() rendering.
 
-Fix 1 — Live center simulation no longer flashes/disappears
+What caused the problem
 
-Version 3 used components.html(), which renders the drain scene inside a separate
-iframe. Streamlit reruns the app while the simulation is playing, so the iframe was
-being destroyed and recreated repeatedly.
+The scene's CSS included broad selectors such as:
 
-V3.1 uses st.html() to render the SVG scene inline as part of the normal page.
+svg { ... }
 
-Fix 2 — "WHAT'S HAPPENING" text clipping
+.title { ... }
 
-The old iframe had a fixed height. Inline rendering allows the explanation panel
-to use its natural height. V3.1 also slightly increases the SVG height and caption
-padding.
+.badge { ... }
 
-Fix 3 — Smoother playback
+body { ... }
 
-At 4× speed, Version 3 could rerun the entire page many times per second.
+Inside st.html(), those styles are no longer isolated in an iframe. They can
+affect Streamlit's own interface.
 
-V3.1 refreshes the display at a stable rate and changes how much simulated time
-advances per refresh:
+That is why V3.1 could show:
 
-0.5× = slower simulated time
+an enormous selectbox arrow
 
-1× = normal
+a giant help / question-mark icon
 
-2× = twice as fast
+distorted metric cards
 
-4× = four times as fast
+large blank spaces
 
-The V2.1/V3 conceptual hydraulic logic is otherwise preserved.
+the center simulation appearing to vanish or shift
+
+V3.2 fix
+
+All visual-scene CSS is now scoped under a unique .hfscene-root container.
+
+For example:
+
+svg { ... }
+
+became:
+
+.hfscene-root svg { ... }
+
+This preserves the stable inline rendering from V3.1 without affecting the rest
+of the Streamlit page.
+
+V3.2 also:
+
+keeps the unclipped "WHAT'S HAPPENING" panel
+
+keeps inline rendering to avoid iframe flashing
+
+reduces display refresh to about 3 Hz for steadier playback
+
+preserves the V2.1/V3 simulation logic
 
 Recommended test
 
@@ -44,6 +66,10 @@ Distribution: Zone A-heavy
 Drain Type: HF-SMDG
 
 Speed: 4×
+
+The expected behavior remains:
+
+Zone A becomes the first locally activated zone while B and C remain normal longer.
 
 Run
 
