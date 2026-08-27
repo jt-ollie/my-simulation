@@ -5,7 +5,7 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="HF-SMDG V3.1", page_icon="🌧️", layout="wide")
+st.set_page_config(page_title="HF-SMDG V3.2", page_icon="🌧️", layout="wide")
 
 st.markdown(
     """
@@ -432,65 +432,69 @@ def scene_html(state, drain_type):
     system_tag = "PASSIVE ADAPTIVE LOUVERS" if not is_fixed else "NON-ADAPTIVE REFERENCE"
 
     return f"""
-    <html><head><style>
-      body {{
-        margin:0;background:transparent;color:#eaf4ff;
+    <style>
+      .hfscene-root {{
+        margin:0;
+        background:transparent;
+        color:#eaf4ff;
         font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+        width:100%;
       }}
-      .panel {{
+      .hfscene-root .panel {{
         background:linear-gradient(180deg,#0c1520,#09111a);
         border:1px solid #26394c;border-radius:15px;padding:12px;
-        box-shadow:0 12px 35px rgba(0,0,0,.18);
+        box-shadow:0 12px 35px rgba(0,0,0,.18);overflow:hidden;
       }}
-      .top {{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}}
-      .title {{font-size:15px;font-weight:900;letter-spacing:.02em}}
-      .badges {{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}}
-      .badge {{
+      .hfscene-root .top {{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}}
+      .hfscene-root .title {{font-size:15px;font-weight:900;letter-spacing:.02em}}
+      .hfscene-root .badges {{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}}
+      .hfscene-root .badge {{
         font-size:10px;font-weight:800;letter-spacing:.04em;padding:5px 8px;border-radius:999px;
         border:1px solid #28556a;background:#10242d;color:#bfeaf4
       }}
-      .badge.secondary {{border-color:#4b415f;background:#211c2b;color:#dfd3ef}}
-      svg {{
-        width:100%;height:365px;background:linear-gradient(180deg,#111b28,#0d1722);
+      .hfscene-root .badge.secondary {{border-color:#4b415f;background:#211c2b;color:#dfd3ef}}
+      .hfscene-root svg {{
+        width:100%;height:350px;background:linear-gradient(180deg,#111b28,#0d1722);
         border:1px solid #24384b;border-radius:11px
       }}
-      .road {{fill:#373f4b}} .curb {{fill:#737d89}}
-      .lane {{stroke:#79838e;stroke-width:2;stroke-dasharray:20 14;opacity:.6}}
-      .water {{fill:url(#waterGrad);opacity:.82}}
-      .surface {{stroke:#66d9ef;stroke-width:2;stroke-dasharray:8 6}}
-      .flood {{stroke:#f3b94e;stroke-width:1.5;stroke-dasharray:6 5}}
-      .small {{fill:#a0b4c8;font-size:10px}} .floodtext {{fill:#f2c875;font-size:10px;font-weight:800}}
-      .zone {{fill:#122130;stroke:#34536a;stroke-width:1.2}} .bay {{fill:#2b2218;stroke:#7b5c38;stroke-width:1.2}}
-      .fixed-bar {{stroke:#9aa6b2;stroke-width:8;stroke-linecap:round}}
-      .louver {{stroke:#78dbe0;stroke-width:8;stroke-linecap:round}}
-      .louver.active {{stroke:#ffbe4a;filter:drop-shadow(0 0 5px rgba(255,190,74,.38))}}
-      .linkage {{stroke:#7f92a6;stroke-width:3}}
-      .float {{fill:#607489;stroke:#b0c2d2;stroke-width:2}}
-      .float.raised {{fill:#ffb83d;stroke:#ffe1a0;filter:drop-shadow(0 0 4px rgba(255,184,61,.4))}}
-      .float-label {{fill:#8497aa;font-size:8px;font-weight:800}}
-      .raised-text {{fill:#ffc55e}}
-      .no-actuator {{fill:#8493a2;font-size:7.5px;font-weight:800;letter-spacing:.06em}}
-      .leaf path {{fill:#8f8a3f;stroke:#c6bd67;stroke-width:.8}}
-      .leaf line {{stroke:#5e612e;stroke-width:1}}
-      .bag path {{fill:#c7d0d8;stroke:#eef4f8;stroke-width:1;opacity:.96}}
-      .moving {{animation:debrisPulse 1.2s ease-in-out infinite alternate}}
+      .hfscene-root .road {{fill:#373f4b}} .hfscene-root .curb {{fill:#737d89}}
+      .hfscene-root .lane {{stroke:#79838e;stroke-width:2;stroke-dasharray:20 14;opacity:.6}}
+      .hfscene-root .water {{fill:url(#waterGrad);opacity:.82}}
+      .hfscene-root .surface {{stroke:#66d9ef;stroke-width:2;stroke-dasharray:8 6}}
+      .hfscene-root .flood {{stroke:#f3b94e;stroke-width:1.5;stroke-dasharray:6 5}}
+      .hfscene-root .small {{fill:#a0b4c8;font-size:10px}} .hfscene-root .floodtext {{fill:#f2c875;font-size:10px;font-weight:800}}
+      .hfscene-root .zone {{fill:#122130;stroke:#34536a;stroke-width:1.2}} .hfscene-root .bay {{fill:#2b2218;stroke:#7b5c38;stroke-width:1.2}}
+      .hfscene-root .fixed-bar {{stroke:#9aa6b2;stroke-width:8;stroke-linecap:round}}
+      .hfscene-root .louver {{stroke:#78dbe0;stroke-width:8;stroke-linecap:round}}
+      .hfscene-root .louver.active {{stroke:#ffbe4a;filter:drop-shadow(0 0 5px rgba(255,190,74,.38))}}
+      .hfscene-root .linkage {{stroke:#7f92a6;stroke-width:3}}
+      .hfscene-root .float {{fill:#607489;stroke:#b0c2d2;stroke-width:2}}
+      .hfscene-root .float.raised {{fill:#ffb83d;stroke:#ffe1a0;filter:drop-shadow(0 0 4px rgba(255,184,61,.4))}}
+      .hfscene-root .float-label {{fill:#8497aa;font-size:8px;font-weight:800}}
+      .hfscene-root .raised-text {{fill:#ffc55e}}
+      .hfscene-root .no-actuator {{fill:#8493a2;font-size:7.5px;font-weight:800;letter-spacing:.06em}}
+      .hfscene-root .leaf path {{fill:#8f8a3f;stroke:#c6bd67;stroke-width:.8}}
+      .hfscene-root .leaf line {{stroke:#5e612e;stroke-width:1}}
+      .hfscene-root .bag path {{fill:#c7d0d8;stroke:#eef4f8;stroke-width:1;opacity:.96}}
+      .hfscene-root .moving {{animation:debrisPulse 1.2s ease-in-out infinite alternate}}
       @keyframes debrisPulse {{from{{opacity:.72}} to{{opacity:1}}}}
-      .zone-name {{fill:#edf6ff;font-size:13px;font-weight:900}}
-      .zone-status {{fill:#92a6b9;font-size:9px;font-weight:800}} .status-active {{fill:#ffc85d}}
-      .redirect {{
+      .hfscene-root .zone-name {{fill:#edf6ff;font-size:13px;font-weight:900}}
+      .hfscene-root .zone-status {{fill:#92a6b9;font-size:9px;font-weight:800}} .hfscene-root .status-active {{fill:#ffc85d}}
+      .hfscene-root .redirect {{
         fill:none;stroke:#f2b548;stroke-width:2;stroke-dasharray:7 5;marker-end:url(#amber);
         animation:dashMove 1.05s linear infinite
       }}
       @keyframes dashMove {{to{{stroke-dashoffset:-24}}}}
-      .flow {{fill:none;stroke:#85def1;stroke-width:3;marker-end:url(#blue)}}
-      .caption {{
+      .hfscene-root .flow {{fill:none;stroke:#85def1;stroke-width:3;marker-end:url(#blue)}}
+      .hfscene-root .caption {{
         display:grid;grid-template-columns:115px 1fr;gap:8px;margin-top:10px;
         background:#0e1c28;border:1px solid #223a4d;border-left:4px solid #55d3dd;
         border-radius:7px;padding:10px 11px;font-size:12px;line-height:1.45;min-height:40px
       }}
-      .caption strong {{color:#7ee4ea}} .caption span {{color:#d7e7f4}}
-      .baynote {{fill:#c6a678;font-size:8px}}
-    </style></head><body>
+      .hfscene-root .caption strong {{color:#7ee4ea}} .hfscene-root .caption span {{color:#d7e7f4}}
+      .hfscene-root .baynote {{fill:#c6a678;font-size:8px}}
+    </style>
+    <div class="hfscene-root">
     <div class="panel">
       <div class="top">
         <div class="title">LIVE DRAIN SIMULATION</div>
@@ -543,15 +547,16 @@ def scene_html(state, drain_type):
         <text class="small" x="286" y="316">WATER → STORM DRAIN</text>
       </svg>
       <div class="caption"><strong>WHAT'S HAPPENING</strong><span>{explanation}</span></div>
-    </div></body></html>
+    </div>
+    </div>
     """
 
 
 # -----------------------------
 # Session state
 # -----------------------------
-if "sim_v31" not in st.session_state:
-    st.session_state.sim_v31 = initial_state()
+if "sim_v32" not in st.session_state:
+    st.session_state.sim_v32 = initial_state()
 
 # -----------------------------
 # Controls
@@ -595,19 +600,19 @@ st.markdown(
 b1,b2,b3,b4 = st.columns(4)
 with b1:
     if st.button("▶ Start Simulation", use_container_width=True, type="primary"):
-        st.session_state.sim_v31["running"] = True
+        st.session_state.sim_v32["running"] = True
 with b2:
     if st.button("⏸ Pause", use_container_width=True):
-        st.session_state.sim_v31["running"] = False
+        st.session_state.sim_v32["running"] = False
 with b3:
     if st.button("⏭ Step +1 s", use_container_width=True):
-        st.session_state.sim_v31["running"] = False
-        step(st.session_state.sim_v31, rain, debris, distribution, drain_type, 1.0)
+        st.session_state.sim_v32["running"] = False
+        step(st.session_state.sim_v32, rain, debris, distribution, drain_type, 1.0)
 with b4:
     if st.button("↺ Reset", use_container_width=True):
-        st.session_state.sim_v31 = initial_state(); st.rerun()
+        st.session_state.sim_v32 = initial_state(); st.rerun()
 
-state = st.session_state.sim_v31
+state = st.session_state.sim_v32
 zones = state["zones"]
 max_cm = max(z["depth_m"] for z in zones) * 100
 flow = sum(z["flow_lps"] for z in zones)
@@ -727,12 +732,12 @@ The **redirected debris** value is recorded as cumulative blockage **percentage-
 
 **Important:** this is not CFD and is not field-calibrated. Debris arrival and debris redistribution are simplified transparent model parameters used to demonstrate the invention's operating logic.''')
 
-st.caption("HF-SMDG V3.1 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
+st.caption("HF-SMDG V3.2 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
 
 if state["running"]:
     # Keep the visual refresh rate stable instead of rebuilding the page
     # faster and faster as simulation speed increases.
-    REFRESH_INTERVAL_S = 0.25
+    REFRESH_INTERVAL_S = 0.33
     time.sleep(REFRESH_INTERVAL_S)
 
     # Advance simulated time according to the selected speed.
