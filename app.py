@@ -6,7 +6,102 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="HF-SMDG V2.1", page_icon="🌧️", layout="wide")
+st.set_page_config(page_title="HF-SMDG V3", page_icon="🌧️", layout="wide")
+
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background:
+            radial-gradient(circle at 72% 0%, rgba(22, 104, 121, .12), transparent 30%),
+            #080d14;
+    }
+    [data-testid="stSidebar"] {
+        background: #111722;
+        border-right: 1px solid #273342;
+    }
+    [data-testid="stMetric"] {
+        background: linear-gradient(180deg, #111a26, #0d141e);
+        border: 1px solid #27384b;
+        border-radius: 12px;
+        padding: 12px 14px;
+    }
+    [data-testid="stMetricLabel"] { color: #93a7bc; }
+    [data-testid="stMetricValue"] { color: #edf7ff; }
+    .block-container {
+        padding-top: 1.8rem;
+        padding-bottom: 4rem;
+        max-width: 1500px;
+    }
+    .hf-kicker {
+        color: #57d8df;
+        font-size: .76rem;
+        font-weight: 800;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        margin-bottom: .2rem;
+    }
+    .hf-sub {
+        color: #93a7bc;
+        margin-top: -.55rem;
+        margin-bottom: 1rem;
+    }
+    .cause-strip {
+        display:grid;
+        grid-template-columns:repeat(6,minmax(0,1fr));
+        gap:8px;
+        margin:8px 0 16px 0;
+    }
+    .cause-card {
+        background:#0d1621;
+        border:1px solid #24374a;
+        border-radius:10px;
+        padding:9px 8px;
+        min-height:66px;
+    }
+    .cause-num {
+        color:#5fe3e6;
+        font-size:.70rem;
+        font-weight:900;
+    }
+    .cause-title {
+        color:#eff7ff;
+        font-size:.80rem;
+        font-weight:800;
+        margin-top:3px;
+    }
+    .cause-desc {
+        color:#8fa3b7;
+        font-size:.67rem;
+        margin-top:2px;
+        line-height:1.25;
+    }
+    .event-card {
+        background:#0d1520;
+        border:1px solid #253548;
+        border-radius:9px;
+        padding:8px 11px;
+        margin-bottom:6px;
+        color:#dbe8f5;
+        font-size:.82rem;
+    }
+    .model-note {
+        color:#94a7ba;
+        font-size:.77rem;
+        line-height:1.4;
+        background:#0d1520;
+        border-left:3px solid #51d1d8;
+        padding:8px 10px;
+        border-radius:6px;
+    }
+    @media (max-width:1000px) {
+        .cause-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # -----------------------------
 # Simplified conceptual model
@@ -217,23 +312,46 @@ def status(state):
     return "NORMAL", "Runoff is draining without an active louver response."
 
 
-def louver_line(x, y, angle, active):
+def louver_line(x, y, angle, active, fixed=False):
     length = 42
     r = math.radians(angle)
     x2 = x + length * math.cos(r)
     y2 = y - length * math.sin(r)
-    cls = "louver active" if active else "louver"
+    cls = "fixed-bar" if fixed else ("louver active" if active else "louver")
     return f'<line class="{cls}" x1="{x:.1f}" y1="{y}" x2="{x2:.1f}" y2="{y2:.1f}" />'
 
 
+def leaf_svg(x, y, rotation=0, moving=False):
+    cls = "leaf moving" if moving else "leaf"
+    return f"""
+    <g class="{cls}" transform="translate({x} {y}) rotate({rotation})">
+      <path d="M0,0 C7,-7 16,-6 19,0 C14,8 6,9 0,0 Z"/>
+      <line x1="3" y1="1" x2="16" y2="-1"/>
+    </g>
+    """
+
+
+def bag_svg(x, y, moving=False):
+    cls = "bag moving" if moving else "bag"
+    return f"""
+    <g class="{cls}" transform="translate({x} {y}) scale(.62)">
+      <path d="M0,5 L3,0 L8,4 L13,0 L17,5 L15,22 L2,22 Z"/>
+      <path d="M4,5 C5,1 7,1 8,5"/>
+      <path d="M10,5 C11,1 13,1 14,5"/>
+    </g>
+    """
+
+
 def debris_svg(x0, blockage, active, seed):
-    count = min(8, int(blockage / 10))
+    count = min(10, int(blockage / 7.0))
     out = []
     for i in range(count):
-        x = x0 + 20 + ((i * 37 + seed * 11) % 135)
-        y = 90 + ((i * 19 + seed * 7) % 34)
-        cls = "debris moving" if active else "debris"
-        out.append(f'<rect class="{cls}" x="{x}" y="{y}" width="13" height="7" rx="2"/>')
+        x = x0 + 18 + ((i * 39 + seed * 13) % 137)
+        y = 87 + ((i * 17 + seed * 9) % 38)
+        if i % 4 == 3:
+            out.append(bag_svg(x, y, active))
+        else:
+            out.append(leaf_svg(x, y, ((i * 29) % 46) - 23, active))
     return "".join(out)
 
 
@@ -241,100 +359,192 @@ def scene_html(state, drain_type):
     zones = state["zones"]
     max_depth = max(z["depth_m"] for z in zones)
     frac = min(max_depth / MAX_DISPLAY_DEPTH_M, 1.0)
-    water_h = 90 * frac
-    water_y = 155 - water_h
-    flood_y = 155 - 90 * min(FLOOD_THRESHOLD_M / MAX_DISPLAY_DEPTH_M, 1.0)
-    xs = [65, 260, 455]
-    bay_x = 650
-    grate_y = 150
+    water_h = 92 * frac
+    water_y = 158 - water_h
+    flood_y = 158 - 92 * min(FLOOD_THRESHOLD_M / MAX_DISPLAY_DEPTH_M, 1.0)
 
-    pieces = []
-    louvers = []
-    floats = []
-    labels = []
-    arrows = []
+    xs = [62, 258, 454]
+    bay_x = 654
+    grate_y = 151
+    is_fixed = drain_type == "Fixed Grate"
+
+    pieces, louvers, floats, labels, arrows = [], [], [], [], []
 
     for idx, (z, x0) in enumerate(zip(zones, xs)):
         pieces.append(debris_svg(x0, z["blockage"], z["float_active"], idx))
-        for j in range(4):
-            louvers.append(louver_line(x0 + 25 + j*32, grate_y, z["angle"], z["float_active"]))
-        fy = 232 if not z["float_active"] else 202
-        floats.append(
-            f'<line class="linkage" x1="{x0+82}" y1="154" x2="{x0+82}" y2="{fy-13}" />'
-            f'<circle class="float {"raised" if z["float_active"] else ""}" cx="{x0+82}" cy="{fy}" r="12" />'
-        )
-        labels.append(
-            f'<text class="zone-name" x="{x0+7}" y="182">ZONE {z["name"]}</text>'
-            f'<text class="zone-status {"status-active" if z["float_active"] else ""}" x="{x0+7}" y="199">'
-            f'{"ACTIVE" if z["float_active"] else "NORMAL"} · {z["angle"]}° · {z["blockage"]:.0f}% blocked</text>'
-        )
-        if z["float_active"]:
-            arrows.append(f'<path class="redirect" d="M {x0+112} 100 C {x0+155} 75, 625 75, 675 100"/>')
 
-    bay_count = min(10, int(state["debris_bay"] / 4))
+        for j in range(4):
+            louvers.append(
+                louver_line(
+                    x0 + 24 + j * 32,
+                    grate_y,
+                    z["angle"],
+                    z["float_active"],
+                    fixed=is_fixed,
+                )
+            )
+
+        if is_fixed:
+            floats.append(
+                f'<text class="no-actuator" x="{x0+82}" y="226" text-anchor="middle">'
+                f'NO FLOAT / ACTUATOR</text>'
+            )
+        else:
+            fy = 205 if z["float_active"] else 233
+            floats.append(
+                f'<line class="linkage" x1="{x0+82}" y1="155" x2="{x0+82}" y2="{fy-14}" />'
+                f'<circle class="float {"raised" if z["float_active"] else ""}" cx="{x0+82}" cy="{fy}" r="12" />'
+                f'<text class="float-label {"raised-text" if z["float_active"] else ""}" '
+                f'x="{x0+82}" y="{fy+29}" text-anchor="middle">'
+                f'FLOAT: {"RAISED" if z["float_active"] else "DOWN"}</text>'
+            )
+
+        mode = "FIXED" if is_fixed else ("ACTIVE" if z["float_active"] else "NORMAL")
+        labels.append(
+            f'<text class="zone-name" x="{x0+8}" y="181">ZONE {z["name"]}</text>'
+            f'<text class="zone-status {"status-active" if z["float_active"] else ""}" '
+            f'x="{x0+8}" y="198">{mode} · {z["angle"]}° · {z["blockage"]:.0f}% blocked</text>'
+        )
+
+        if z["float_active"] and not is_fixed:
+            arrows.append(
+                f'<path class="redirect" d="M {x0+115} 102 C {x0+160} 70, 625 70, 685 102"/>'
+            )
+
+    bay_count = min(12, int(state["debris_bay"] / 2.8))
     bay_bits = []
     for i in range(bay_count):
-        x = bay_x + 16 + (i % 3) * 34
-        y = 112 + (i // 3) * 17
-        bay_bits.append(f'<rect class="baypiece" x="{x}" y="{y}" width="18" height="8" rx="2"/>')
+        x = bay_x + 17 + (i % 3) * 34
+        y = 116 + (i // 3) * 19
+        if i % 4 == 3:
+            bay_bits.append(bag_svg(x, y, False))
+        else:
+            bay_bits.append(leaf_svg(x, y, (i * 27) % 46 - 23, False))
 
     explanation = escape(current_explanation(state, drain_type))
+    system_tag = "PASSIVE ADAPTIVE LOUVERS" if not is_fixed else "NON-ADAPTIVE REFERENCE"
 
-    return f'''
+    return f"""
     <html><head><style>
-      body{{margin:0;background:transparent;font-family:Arial,sans-serif;color:#e9f0f8}}
-      .panel{{background:#0d1520;border:1px solid #253346;border-radius:14px;padding:12px}}
-      .top{{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}}
-      .badge{{font-size:12px;padding:5px 9px;border:1px solid #2a5164;border-radius:999px;background:#10232d}}
-      svg{{width:100%;height:330px;background:#101a27;border:1px solid #223147;border-radius:10px}}
-      .road{{fill:#343b46}} .curb{{fill:#68727f}} .water{{fill:#185f82;opacity:.78}}
-      .surface{{stroke:#61c5e8;stroke-width:2;stroke-dasharray:7 5}}
-      .flood{{stroke:#e6a94f;stroke-width:1.5;stroke-dasharray:6 5}}
-      .small{{fill:#9fb1c5;font-size:10px}} .floodtext{{fill:#e8bc75;font-size:10px}}
-      .zone{{fill:#142332;stroke:#335169}} .bay{{fill:#2e251b;stroke:#755937}}
-      .louver{{stroke:#79d8dd;stroke-width:7;stroke-linecap:round}} .louver.active{{stroke:#f3bf58}}
-      .linkage{{stroke:#8796a8;stroke-width:3}} .float{{fill:#5f7186;stroke:#a9bbcc;stroke-width:2}}
-      .float.raised{{fill:#f0b34a;stroke:#ffe0a0}} .debris{{fill:#aa7446}} .debris.moving{{fill:#d89a52}}
-      .baypiece{{fill:#9d6a3e}} .zone-name{{fill:#eaf1fa;font-size:13px;font-weight:bold}}
-      .zone-status{{fill:#98a9bc;font-size:10px}} .status-active{{fill:#ffc85d;font-weight:bold}}
-      .redirect{{fill:none;stroke:#efb74f;stroke-width:2;stroke-dasharray:6 5;marker-end:url(#arr)}}
-      .flow{{fill:none;stroke:#8bdcf2;stroke-width:3;marker-end:url(#blue)}}
-      .caption{{margin-top:10px;border-left:3px solid #56c5df;background:#101e2b;padding:10px 12px;border-radius:6px;font-size:13px;line-height:1.35}}
+      body {{
+        margin:0;background:transparent;color:#eaf4ff;
+        font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      }}
+      .panel {{
+        background:linear-gradient(180deg,#0c1520,#09111a);
+        border:1px solid #26394c;border-radius:15px;padding:12px;
+        box-shadow:0 12px 35px rgba(0,0,0,.18);
+      }}
+      .top {{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}}
+      .title {{font-size:15px;font-weight:900;letter-spacing:.02em}}
+      .badges {{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}}
+      .badge {{
+        font-size:10px;font-weight:800;letter-spacing:.04em;padding:5px 8px;border-radius:999px;
+        border:1px solid #28556a;background:#10242d;color:#bfeaf4
+      }}
+      .badge.secondary {{border-color:#4b415f;background:#211c2b;color:#dfd3ef}}
+      svg {{
+        width:100%;height:355px;background:linear-gradient(180deg,#111b28,#0d1722);
+        border:1px solid #24384b;border-radius:11px
+      }}
+      .road {{fill:#373f4b}} .curb {{fill:#737d89}}
+      .lane {{stroke:#79838e;stroke-width:2;stroke-dasharray:20 14;opacity:.6}}
+      .water {{fill:url(#waterGrad);opacity:.82}}
+      .surface {{stroke:#66d9ef;stroke-width:2;stroke-dasharray:8 6}}
+      .flood {{stroke:#f3b94e;stroke-width:1.5;stroke-dasharray:6 5}}
+      .small {{fill:#a0b4c8;font-size:10px}} .floodtext {{fill:#f2c875;font-size:10px;font-weight:800}}
+      .zone {{fill:#122130;stroke:#34536a;stroke-width:1.2}} .bay {{fill:#2b2218;stroke:#7b5c38;stroke-width:1.2}}
+      .fixed-bar {{stroke:#9aa6b2;stroke-width:8;stroke-linecap:round}}
+      .louver {{stroke:#78dbe0;stroke-width:8;stroke-linecap:round}}
+      .louver.active {{stroke:#ffbe4a;filter:drop-shadow(0 0 5px rgba(255,190,74,.38))}}
+      .linkage {{stroke:#7f92a6;stroke-width:3}}
+      .float {{fill:#607489;stroke:#b0c2d2;stroke-width:2}}
+      .float.raised {{fill:#ffb83d;stroke:#ffe1a0;filter:drop-shadow(0 0 4px rgba(255,184,61,.4))}}
+      .float-label {{fill:#8497aa;font-size:8px;font-weight:800}}
+      .raised-text {{fill:#ffc55e}}
+      .no-actuator {{fill:#8493a2;font-size:7.5px;font-weight:800;letter-spacing:.06em}}
+      .leaf path {{fill:#8f8a3f;stroke:#c6bd67;stroke-width:.8}}
+      .leaf line {{stroke:#5e612e;stroke-width:1}}
+      .bag path {{fill:#c7d0d8;stroke:#eef4f8;stroke-width:1;opacity:.96}}
+      .moving {{animation:debrisPulse 1.2s ease-in-out infinite alternate}}
+      @keyframes debrisPulse {{from{{opacity:.72}} to{{opacity:1}}}}
+      .zone-name {{fill:#edf6ff;font-size:13px;font-weight:900}}
+      .zone-status {{fill:#92a6b9;font-size:9px;font-weight:800}} .status-active {{fill:#ffc85d}}
+      .redirect {{
+        fill:none;stroke:#f2b548;stroke-width:2;stroke-dasharray:7 5;marker-end:url(#amber);
+        animation:dashMove 1.05s linear infinite
+      }}
+      @keyframes dashMove {{to{{stroke-dashoffset:-24}}}}
+      .flow {{fill:none;stroke:#85def1;stroke-width:3;marker-end:url(#blue)}}
+      .caption {{
+        display:grid;grid-template-columns:115px 1fr;gap:8px;margin-top:10px;
+        background:#0e1c28;border:1px solid #223a4d;border-left:4px solid #55d3dd;
+        border-radius:7px;padding:9px 11px;font-size:12px;line-height:1.4
+      }}
+      .caption strong {{color:#7ee4ea}} .caption span {{color:#d7e7f4}}
+      .baynote {{fill:#c6a678;font-size:8px}}
     </style></head><body>
     <div class="panel">
-      <div class="top"><b>Live Drain Simulation</b><span class="badge">CURRENT TEST: {escape(drain_type)}</span></div>
-      <svg viewBox="0 0 820 305">
+      <div class="top">
+        <div class="title">LIVE DRAIN SIMULATION</div>
+        <div class="badges">
+          <span class="badge">CURRENT TEST: {escape(drain_type)}</span>
+          <span class="badge secondary">{system_tag}</span>
+        </div>
+      </div>
+      <svg viewBox="0 0 825 325">
         <defs>
-          <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#efb74f"/></marker>
-          <marker id="blue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#8bdcf2"/></marker>
+          <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#237fa4"/><stop offset="100%" stop-color="#124b69"/>
+          </linearGradient>
+          <marker id="amber" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#f2b548"/>
+          </marker>
+          <marker id="blue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#85def1"/>
+          </marker>
         </defs>
-        <rect class="road" x="0" y="0" width="820" height="72"/><rect class="curb" x="0" y="62" width="820" height="10"/>
-        <text class="small" x="18" y="25">ROAD / GUTTER RUNOFF</text><path class="flow" d="M205 35 L600 35"/>
-        <text class="small" x="365" y="25">FLOW → DEBRIS BAY</text>
-        <rect class="water" x="0" y="{water_y:.1f}" width="820" height="{water_h:.1f}"/>
-        <line class="surface" x1="0" y1="{water_y:.1f}" x2="820" y2="{water_y:.1f}"/>
-        <line class="flood" x1="0" y1="{flood_y:.1f}" x2="820" y2="{flood_y:.1f}"/>
-        <text class="floodtext" x="8" y="{max(83,flood_y-5):.1f}">8 cm flood threshold</text>
-        <rect class="zone" x="65" y="105" width="165" height="140" rx="8"/>
-        <rect class="zone" x="260" y="105" width="165" height="140" rx="8"/>
-        <rect class="zone" x="455" y="105" width="165" height="140" rx="8"/>
-        <rect class="bay" x="650" y="105" width="130" height="140" rx="8"/>
+
+        <rect class="road" x="0" y="0" width="825" height="73"/>
+        <line class="lane" x1="80" y1="38" x2="745" y2="38"/>
+        <rect class="curb" x="0" y="63" width="825" height="10"/>
+        <text class="small" x="18" y="22">ROAD / GUTTER RUNOFF</text>
+        <path class="flow" d="M205 22 L600 22"/>
+        <text class="small" x="353" y="13">SURFACE FLOW → COLLECTION SIDE</text>
+
+        <rect class="water" x="0" y="{water_y:.1f}" width="825" height="{water_h:.1f}"/>
+        <line class="surface" x1="0" y1="{water_y:.1f}" x2="825" y2="{water_y:.1f}"/>
+        <line class="flood" x1="0" y1="{flood_y:.1f}" x2="825" y2="{flood_y:.1f}"/>
+        <text class="floodtext" x="8" y="{max(84,flood_y-5):.1f}">8 cm FLOOD THRESHOLD</text>
+
+        <rect class="zone" x="62" y="105" width="166" height="147" rx="8"/>
+        <rect class="zone" x="258" y="105" width="166" height="147" rx="8"/>
+        <rect class="zone" x="454" y="105" width="166" height="147" rx="8"/>
+        <rect class="bay" x="{bay_x}" y="105" width="132" height="147" rx="8"/>
+
         {''.join(pieces)}{''.join(louvers)}{''.join(floats)}{''.join(labels)}{''.join(arrows)}
-        <text class="zone-name" x="662" y="182">DEBRIS BAY</text>
-        <text class="zone-status" x="662" y="199">{state['debris_bay']:.1f} redirected units</text>{''.join(bay_bits)}
-        <path class="flow" d="M147 253 L147 288"/><path class="flow" d="M342 253 L342 288"/><path class="flow" d="M537 253 L537 288"/>
-        <text class="small" x="295" y="299">WATER TO STORM DRAIN</text>
+
+        <text class="zone-name" x="{bay_x+10}" y="181">DEBRIS BAY</text>
+        <text class="zone-status" x="{bay_x+10}" y="198">{state['debris_bay']:.1f} blockage-pp redirected</text>
+        <text class="baynote" x="{bay_x+10}" y="232">debris stays accessible</text>
+        <text class="baynote" x="{bay_x+10}" y="243">above the drainage pipe</text>
+        {''.join(bay_bits)}
+
+        <path class="flow" d="M145 258 L145 300"/>
+        <path class="flow" d="M341 258 L341 300"/>
+        <path class="flow" d="M537 258 L537 300"/>
+        <text class="small" x="286" y="316">WATER → STORM DRAIN</text>
       </svg>
-      <div class="caption"><b>What's happening:</b> {explanation}</div>
+      <div class="caption"><strong>WHAT'S HAPPENING</strong><span>{explanation}</span></div>
     </div></body></html>
-    '''
+    """
 
 
 # -----------------------------
 # Session state
 # -----------------------------
-if "sim_v21" not in st.session_state:
-    st.session_state.sim_v21 = initial_state()
+if "sim_v3" not in st.session_state:
+    st.session_state.sim_v3 = initial_state()
 
 # -----------------------------
 # Controls
@@ -348,25 +558,49 @@ speed = st.sidebar.select_slider("Simulation Speed", [0.5, 1, 2, 4], value=4, fo
 st.sidebar.markdown("---")
 st.sidebar.caption("Each zone has its own float. At 4 cm local water depth, that zone rotates from 20° to 50°. It resets below 2 cm.")
 
-st.title("HF-SMDG Simulation — Version 2.1")
-st.caption("Visual conceptual model: rainfall → debris blockage → local water buildup → float activation → louver movement → debris redistribution → drainage.")
+st.markdown(
+    '<div class="hf-kicker">GED104 · CONCEPTUAL SOFTWARE PROTOTYPE</div>',
+    unsafe_allow_html=True,
+)
+st.title("HF-SMDG // Hydro-Flow Smart Micro-Drainage Gate")
+st.markdown(
+    '<div class="hf-sub">'
+    'Segmented, float-actuated drainage louvers that respond to localized debris blockage '
+    'without motors or grid electricity.'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="cause-strip">
+      <div class="cause-card"><div class="cause-num">01</div><div class="cause-title">Debris arrives</div><div class="cause-desc">Leaves and plastic reduce usable inlet area.</div></div>
+      <div class="cause-card"><div class="cause-num">02</div><div class="cause-title">Water backs up</div><div class="cause-desc">Local drainage falls below incoming runoff.</div></div>
+      <div class="cause-card"><div class="cause-num">03</div><div class="cause-title">Float rises</div><div class="cause-desc">That zone triggers at 4 cm local water depth.</div></div>
+      <div class="cause-card"><div class="cause-num">04</div><div class="cause-title">Louvers rotate</div><div class="cause-desc">The zone changes from 20° to 50°.</div></div>
+      <div class="cause-card"><div class="cause-num">05</div><div class="cause-title">Debris shifts</div><div class="cause-desc">Floating blockage is modeled toward the side bay.</div></div>
+      <div class="cause-card"><div class="cause-num">06</div><div class="cause-title">Flow recalculates</div><div class="cause-desc">More usable opening can drain more water.</div></div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 b1,b2,b3,b4 = st.columns(4)
 with b1:
     if st.button("▶ Start Simulation", use_container_width=True, type="primary"):
-        st.session_state.sim_v21["running"] = True
+        st.session_state.sim_v3["running"] = True
 with b2:
     if st.button("⏸ Pause", use_container_width=True):
-        st.session_state.sim_v21["running"] = False
+        st.session_state.sim_v3["running"] = False
 with b3:
     if st.button("⏭ Step +1 s", use_container_width=True):
-        st.session_state.sim_v21["running"] = False
-        step(st.session_state.sim_v21, rain, debris, distribution, drain_type, 1.0)
+        st.session_state.sim_v3["running"] = False
+        step(st.session_state.sim_v3, rain, debris, distribution, drain_type, 1.0)
 with b4:
     if st.button("↺ Reset", use_container_width=True):
-        st.session_state.sim_v21 = initial_state(); st.rerun()
+        st.session_state.sim_v3 = initial_state(); st.rerun()
 
-state = st.session_state.sim_v21
+state = st.session_state.sim_v3
 zones = state["zones"]
 max_cm = max(z["depth_m"] for z in zones) * 100
 flow = sum(z["flow_lps"] for z in zones)
@@ -378,7 +612,7 @@ m1.metric("Simulation Time", fmt_time(state["time_s"]))
 m2.metric("Max Local Water", f"{max_cm:.2f} cm")
 m3.metric("Total Drainage", f"{flow:.2f} L/s")
 m4.metric("Active Zones", f"{active} / 3")
-m5.metric("Debris Bay", f"{state['debris_bay']:.1f} units")
+m5.metric("Redirected Debris", f"{state['debris_bay']:.1f} pp", help="Cumulative blockage percentage-points redirected from active zones toward the debris bay.")
 
 if stat == "FLOOD RISK": st.error(f"**STATUS: {stat}** — {detail}")
 elif stat == "ADAPTIVE RESPONSE": st.warning(f"**STATUS: {stat}** — {detail}")
@@ -388,16 +622,36 @@ left,right = st.columns([3.25,1.15])
 with left:
     components.html(scene_html(state, drain_type), height=435, scrolling=False)
 with right:
-    st.subheader("Zone Status")
+    st.subheader("Zone Inspector")
     for z in zones:
-        icon = "🟠" if z["float_active"] else "🟢"
-        st.markdown(f"**{icon} Zone {z['name']}**  \nWater: **{z['depth_m']*100:.2f} cm**  \nBlockage: **{z['blockage']:.1f}%**  \nLouver: **{z['angle']}° {'ACTIVE' if z['float_active'] else 'NORMAL'}**  \nOpen area: **{100-z['blockage']:.1f}%**")
-        st.markdown("---")
-    st.caption("Trigger: 4 cm · Reset: 2 cm · Flood threshold: 8 cm")
+        if drain_type == "Fixed Grate":
+            icon = "⚪"
+            mode = "FIXED"
+            float_state = "Not present"
+        else:
+            icon = "🟠" if z["float_active"] else "🟢"
+            mode = "ACTIVE" if z["float_active"] else "NORMAL"
+            float_state = "RAISED" if z["float_active"] else "DOWN"
 
-st.subheader("What the Simulation Is Doing")
+        st.markdown(
+            f"**{icon} Zone {z['name']} — {mode}**  \n"
+            f"Water depth: **{z['depth_m']*100:.2f} cm**  \n"
+            f"Blockage: **{z['blockage']:.1f}%**  \n"
+            f"Effective opening: **{100-z['blockage']:.1f}%**  \n"
+            f"Louver angle: **{z['angle']}°**  \n"
+            f"Float: **{float_state}**"
+        )
+        if drain_type == "HF-SMDG" and z["float_active"]:
+            st.caption("Local trigger reached → this zone is responding.")
+        st.markdown("---")
+    st.caption("Activation: 4 cm · Reset: 2 cm · Flood threshold: 8 cm")
+
+st.subheader("Live Event Log")
 for e in reversed(state["events"][-6:]):
-    st.write("•", e)
+    st.markdown(
+        f'<div class="event-card">{escape(e)}</div>',
+        unsafe_allow_html=True,
+    )
 
 st.subheader("Water Depth Over Time")
 if state["history"]:
@@ -406,16 +660,48 @@ if state["history"]:
 else:
     st.info("Press Start Simulation or Step +1 s to generate the water-depth history.")
 
-st.subheader("Controlled Comparison: Same Storm, Same Debris")
+st.subheader("Controlled Comparison // Same Storm, Same Debris")
 duration = st.slider("Comparison duration (simulated seconds)", 60, 600, 180, 30)
+st.markdown(
+    '<div class="model-note">'
+    'This test uses identical rainfall, debris level, debris distribution, and duration for both systems. '
+    'The only modeled difference is whether the drain stays fixed or uses the HF-SMDG adaptive-zone response.'
+    '</div>',
+    unsafe_allow_html=True,
+)
 if st.button("Run Fixed Grate vs HF-SMDG Comparison", use_container_width=True):
     fixed = run_scenario(duration, rain, debris, distribution, "Fixed Grate")
     smart = run_scenario(duration, rain, debris, distribution, "HF-SMDG")
     summary = pd.DataFrame([
-        {"System":"Fixed Grate","Max water depth (cm)":fixed["max_depth"]*100,"Final avg blockage (%)":sum(z["blockage"] for z in fixed["zones"])/3,"Total drained (L)":fixed["total_drained"],"Time above flood threshold (s)":fixed["seconds_above_flood"],"Debris redirected (units)":fixed["debris_bay"]},
-        {"System":"HF-SMDG","Max water depth (cm)":smart["max_depth"]*100,"Final avg blockage (%)":sum(z["blockage"] for z in smart["zones"])/3,"Total drained (L)":smart["total_drained"],"Time above flood threshold (s)":smart["seconds_above_flood"],"Debris redirected (units)":smart["debris_bay"]},
+        {"System":"Fixed Grate","Max water depth (cm)":fixed["max_depth"]*100,"Final avg blockage (%)":sum(z["blockage"] for z in fixed["zones"])/3,"Total drained (L)":fixed["total_drained"],"Time above flood threshold (s)":fixed["seconds_above_flood"],"Debris redirected (blockage-pp)":fixed["debris_bay"]},
+        {"System":"HF-SMDG","Max water depth (cm)":smart["max_depth"]*100,"Final avg blockage (%)":sum(z["blockage"] for z in smart["zones"])/3,"Total drained (L)":smart["total_drained"],"Time above flood threshold (s)":smart["seconds_above_flood"],"Debris redirected (blockage-pp)":smart["debris_bay"]},
     ])
     st.dataframe(summary, use_container_width=True, hide_index=True)
+
+    fixed_peak = fixed["max_depth"] * 100
+    smart_peak = smart["max_depth"] * 100
+
+    if smart_peak < fixed_peak:
+        comparison_text = (
+            f"In this conceptual run, HF-SMDG produced a lower modeled peak water depth "
+            f"({smart_peak:.2f} cm) than the fixed grate ({fixed_peak:.2f} cm), while redirecting "
+            f"{smart['debris_bay']:.1f} blockage-percentage-points toward the side bay."
+        )
+    elif smart_peak > fixed_peak:
+        comparison_text = (
+            f"In this conceptual run, HF-SMDG produced a higher modeled peak water depth "
+            f"({smart_peak:.2f} cm) than the fixed grate ({fixed_peak:.2f} cm)."
+        )
+    else:
+        comparison_text = (
+            f"In this conceptual run, both systems reached the same modeled peak water depth "
+            f"({smart_peak:.2f} cm)."
+        )
+
+    st.info(
+        comparison_text
+        + " These outputs demonstrate model behavior and are not field-test performance claims."
+    )
     fh = pd.DataFrame(fixed["history"])[["time_s","max_local_depth_cm"]].rename(columns={"max_local_depth_cm":"Fixed Grate"})
     sh = pd.DataFrame(smart["history"])[["time_s","max_local_depth_cm"]].rename(columns={"max_local_depth_cm":"HF-SMDG"})
     st.line_chart(fh.merge(sh,on="time_s").set_index("time_s"), y_label="Maximum local water depth (cm)", x_label="Simulation time (s)")
@@ -428,9 +714,11 @@ For HF-SMDG, a zone reaching **4 cm** raises its float and rotates that zone fro
 
 The drainage estimate uses **Q = Cd × A × √(2gh)**, with effective opening area reduced by blockage.
 
+The **redirected debris** value is recorded as cumulative blockage **percentage-points (pp)** removed from active inlet zones and conceptually placed in the side debris bay. It is not kilograms or a measured real-world mass.
+
 **Important:** this is not CFD and is not field-calibrated. Debris arrival and debris redistribution are simplified transparent model parameters used to demonstrate the invention's operating logic.''')
 
-st.caption("Educational conceptual simulation only. Results are estimates from simplified hydraulic assumptions and are not field-validated engineering predictions.")
+st.caption("HF-SMDG V3 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
 
 if state["running"]:
     time.sleep(0.45 / speed)
