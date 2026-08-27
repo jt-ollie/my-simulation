@@ -1,78 +1,54 @@
-HF-SMDG Simulation — Version 3
+HF-SMDG Simulation — Version 3.1
 
-Version 3 is the presentation-focused build of the Hydro-Flow Smart Micro-Drainage Gate (HF-SMDG) conceptual software prototype.
+Version 3.1 is a stability and layout fix for Version 3.
 
-V3 upgrades
+Fix 1 — Live center simulation no longer flashes/disappears
 
-polished dark dashboard
+Version 3 used components.html(), which renders the drain scene inside a separate
+iframe. Streamlit reruns the app while the simulation is playing, so the iframe was
+being destroyed and recreated repeatedly.
 
-six-step cause-and-effect strip
+V3.1 uses st.html() to render the SVG scene inline as part of the normal page.
 
-recognizable leaf and plastic-bag debris graphics
+Fix 2 — "WHAT'S HAPPENING" text clipping
 
-fixed grate visually separated from HF-SMDG
+The old iframe had a fixed height. Inline rendering allows the explanation panel
+to use its natural height. V3.1 also slightly increases the SVG height and caption
+padding.
 
-fixed grate explicitly shows NO FLOAT / ACTUATOR
+Fix 3 — Smoother playback
 
-HF-SMDG explicitly shows FLOAT: DOWN / RAISED
+At 4× speed, Version 3 could rerun the entire page many times per second.
 
-active louvers highlighted in amber
+V3.1 refreshes the display at a stable rate and changes how much simulated time
+advances per refresh:
 
-animated debris-redirection arrows
+0.5× = slower simulated time
 
-clearer Zone Inspector
+1× = normal
 
-styled event log
+2× = twice as fast
 
-controlled-comparison explanation in plain language
+4× = four times as fast
 
-debris-bay value renamed to cumulative blockage percentage-points (pp)
+The V2.1/V3 conceptual hydraulic logic is otherwise preserved.
 
-Recommended demonstration
-
-Use:
+Recommended test
 
 Rainfall: 150 mm/hr
 
-Debris Level: High
+Debris: High
 
-Debris Distribution: Zone A-heavy
+Distribution: Zone A-heavy
 
 Drain Type: HF-SMDG
 
 Speed: 4×
 
-Expected sequence:
-
-Zone A accumulates debris fastest.
-
-Local water rises in Zone A.
-
-At 4 cm, Float A changes DOWN → RAISED.
-
-Zone A louvers change 20° → 50°.
-
-Yellow dashed arrows represent conceptual debris movement toward the side bay.
-
-Zones B and C remain normal longer.
-
-Then reset and run the same storm using Fixed Grate.
-
-Finally, use the Controlled Comparison section.
-
-Run locally
+Run
 
 pip install -r requirements.txt
 streamlit run app.py
 
-Scientific transparency
-
-The simplified drainage relationship is:
-
-Q = Cd × A × sqrt(2gh)
-
-The simulation is not CFD and is not field-calibrated.
-
-The debris-bay value is cumulative blockage percentage-points (pp) conceptually removed from active inlet zones. It is not kilograms and does not represent measured debris mass.
-
-Present the software as a working conceptual simulation of the proposed mechanism, not as proof of real-world flood-prevention efficiency.
+This remains an educational conceptual simulation, not CFD or a field-validated
+engineering model.
