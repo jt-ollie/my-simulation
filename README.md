@@ -1,31 +1,34 @@
-HF-SMDG Simulation — Version 2.1
+HF-SMDG Simulation — Version 3
 
-Version 2.1 is a model-tuning update to Version 2.
+Version 3 is the presentation-focused build of the Hydro-Flow Smart Micro-Drainage Gate (HF-SMDG) conceptual software prototype.
 
-Why V2.1 was needed
+V3 upgrades
 
-In Version 2, the nominal drain opening per zone was too small for the 150 mm/hr
-demonstration storm. Even a nearly clean zone could not drain incoming runoff fast
-enough, so Zones A, B, and C all reached the 4 cm float trigger.
+polished dark dashboard
 
-That weakened the invention's most important behavior:
+six-step cause-and-effect strip
 
-localized blockage → localized response
+recognizable leaf and plastic-bag debris graphics
 
-What changed
+fixed grate visually separated from HF-SMDG
 
-ZONE_OPEN_AREA_M2
+fixed grate explicitly shows NO FLOAT / ACTUATOR
 
-V2: 0.0045 m²
+HF-SMDG explicitly shows FLOAT: DOWN / RAISED
 
-V2.1: 0.0100 m²
+active louvers highlighted in amber
 
-At the 4 cm trigger depth, a clean zone can now drain roughly enough water to
-keep pace with its share of the 150 mm/hr demonstration storm.
+animated debris-redirection arrows
 
-A heavily blocked zone loses enough effective opening area that it backs up first.
+clearer Zone Inspector
 
-Expected V2.1 demonstration
+styled event log
+
+controlled-comparison explanation in plain language
+
+debris-bay value renamed to cumulative blockage percentage-points (pp)
+
+Recommended demonstration
 
 Use:
 
@@ -39,38 +42,37 @@ Drain Type: HF-SMDG
 
 Speed: 4×
 
-Expected conceptual sequence:
+Expected sequence:
 
-Zone A accumulates debris faster than B and C.
+Zone A accumulates debris fastest.
 
-Zone A water rises toward 4 cm.
+Local water rises in Zone A.
 
-Around the first ~1–2 simulated minutes, Zone A activates first.
+At 4 cm, Float A changes DOWN → RAISED.
 
-Zone A's float rises and louvers rotate to 50°.
+Zone A louvers change 20° → 50°.
 
-B and C remain normal for substantially longer because they are less obstructed.
+Yellow dashed arrows represent conceptual debris movement toward the side bay.
 
-Zone A redirects some floating debris to the collection bay.
+Zones B and C remain normal longer.
 
-The model recalculates Zone A drainage.
+Then reset and run the same storm using Fixed Grate.
 
-For a 180-second controlled comparison under these default conditions, the model
-should show a clearer difference between the fixed grate and HF-SMDG.
-
-Scientific limitation
-
-The hydraulic opening-flow equation is a real simplified relationship:
-
-Q = Cd × A × sqrt(2gh)
-
-However, the chosen opening area, debris-arrival rate, and debris-redistribution
-coefficient are conceptual model parameters, not field-calibrated engineering data.
-
-V2.1 is designed to make the proposed mechanism's logic observable; it is not a
-real-world performance prediction.
+Finally, use the Controlled Comparison section.
 
 Run locally
 
 pip install -r requirements.txt
 streamlit run app.py
+
+Scientific transparency
+
+The simplified drainage relationship is:
+
+Q = Cd × A × sqrt(2gh)
+
+The simulation is not CFD and is not field-calibrated.
+
+The debris-bay value is cumulative blockage percentage-points (pp) conceptually removed from active inlet zones. It is not kilograms and does not represent measured debris mass.
+
+Present the software as a working conceptual simulation of the proposed mechanism, not as proof of real-world flood-prevention efficiency.
