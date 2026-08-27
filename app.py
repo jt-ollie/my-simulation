@@ -1,4 +1,4 @@
-
+from math import sqrt
 import time
 from html import escape
 from io import BytesIO
@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="HF-SMDG V3.3", page_icon="🌧️", layout="wide")
+st.set_page_config(page_title="HF-SMDG V3.4", page_icon="🌧️", layout="wide")
 
 st.markdown(
     """
@@ -183,7 +183,7 @@ def hydraulic_flow(depth, blockage):
         return 0.0
     open_fraction = max(0.0, 1.0 - blockage / 100.0)
     a_eff = ZONE_OPEN_AREA_M2 * open_fraction
-    return CD * a_eff * math.sqrt(2 * G * depth) * 1000.0
+    return CD * a_eff * sqrt(2 * G * depth) * 1000.0
 
 
 def update_float(zone, drain_type, state=None):
@@ -354,16 +354,37 @@ def _font(size=20, bold=False):
 
 
 def _arrow(draw, start, end, color, width=4):
-    """Draw a line with a simple triangular arrow head."""
+    """Draw a line with a triangular arrow head without using trigonometry."""
     draw.line([start, end], fill=color, width=width)
+
     x1, y1 = start
     x2, y2 = end
-    angle = math.atan2(y2 - y1, x2 - x1)
-    head = 12
-    a1 = angle + math.radians(150)
-    a2 = angle - math.radians(150)
-    p1 = (x2 + head * math.cos(a1), y2 + head * math.sin(a1))
-    p2 = (x2 + head * math.cos(a2), y2 + head * math.sin(a2))
+    dx = x2 - x1
+    dy = y2 - y1
+    length = max((dx * dx + dy * dy) ** 0.5, 1.0)
+
+    ux = dx / length
+    uy = dy / length
+
+    # Perpendicular unit vector.
+    px = -uy
+    py = ux
+
+    head_len = 13
+    head_half_width = 7
+
+    base_x = x2 - ux * head_len
+    base_y = y2 - uy * head_len
+
+    p1 = (
+        base_x + px * head_half_width,
+        base_y + py * head_half_width,
+    )
+    p2 = (
+        base_x - px * head_half_width,
+        base_y - py * head_half_width,
+    )
+
     draw.polygon([(x2, y2), p1, p2], fill=color)
 
 
@@ -497,10 +518,19 @@ def render_scene_png(state, drain_type):
         for j in range(4):
             x1 = x0 + 32 + j * 43
             y1 = 270
-            angle = math.radians(z["angle"])
+            # Only two louver states exist in the conceptual model:
+            # NORMAL = 20 degrees and ACTIVE = 50 degrees.
+            # Precomputed cosine/sine values avoid runtime trig dependencies.
             length = 55
-            x2 = x1 + length * math.cos(angle)
-            y2 = y1 - length * math.sin(angle)
+            if z["angle"] >= 40:
+                cos_a = 0.6427876097   # cos(50 deg)
+                sin_a = 0.7660444431   # sin(50 deg)
+            else:
+                cos_a = 0.9396926208   # cos(20 deg)
+                sin_a = 0.3420201433   # sin(20 deg)
+
+            x2 = x1 + length * cos_a
+            y2 = y1 - length * sin_a
             color = (154, 166, 178) if is_fixed else (amber if z["float_active"] else cyan)
             draw.line([(x1, y1), (x2, y2)], fill=color, width=9)
 
@@ -579,8 +609,8 @@ def render_scene_png(state, drain_type):
 # -----------------------------
 # Session state
 # -----------------------------
-if "sim_v33" not in st.session_state:
-    st.session_state.sim_v33 = initial_state()
+if "sim_v34" not in st.session_state:
+    st.session_state.sim_v34 = initial_state()
 
 # -----------------------------
 # Controls
@@ -624,19 +654,19 @@ st.markdown(
 b1,b2,b3,b4 = st.columns(4)
 with b1:
     if st.button("▶ Start Simulation", use_container_width=True, type="primary"):
-        st.session_state.sim_v33["running"] = True
+        st.session_state.sim_v34["running"] = True
 with b2:
     if st.button("⏸ Pause", use_container_width=True):
-        st.session_state.sim_v33["running"] = False
+        st.session_state.sim_v34["running"] = False
 with b3:
     if st.button("⏭ Step +1 s", use_container_width=True):
-        st.session_state.sim_v33["running"] = False
-        step(st.session_state.sim_v33, rain, debris, distribution, drain_type, 1.0)
+        st.session_state.sim_v34["running"] = False
+        step(st.session_state.sim_v34, rain, debris, distribution, drain_type, 1.0)
 with b4:
     if st.button("↺ Reset", use_container_width=True):
-        st.session_state.sim_v33 = initial_state(); st.rerun()
+        st.session_state.sim_v34 = initial_state(); st.rerun()
 
-state = st.session_state.sim_v33
+state = st.session_state.sim_v34
 zones = state["zones"]
 max_cm = max(z["depth_m"] for z in zones) * 100
 flow = sum(z["flow_lps"] for z in zones)
@@ -762,7 +792,7 @@ The **redirected debris** value is recorded as cumulative blockage **percentage-
 
 **Important:** this is not CFD and is not field-calibrated. Debris arrival and debris redistribution are simplified transparent model parameters used to demonstrate the invention's operating logic.''')
 
-st.caption("HF-SMDG V3.3 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
+st.caption("HF-SMDG V3.4 · Educational conceptual simulation only · Simplified hydraulic assumptions · Not field-validated engineering performance.")
 
 if state["running"]:
     # Keep the visual refresh rate stable instead of rebuilding the page
